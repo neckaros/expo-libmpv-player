@@ -1,0 +1,46 @@
+{
+  "name": "expo-libmpv-player",
+  "version": "0.1.0",
+  "description": "Standalone Expo libmpv video player module extracted from Streamyfin, with PiP, tracks, subtitles and hardware decoding support.",
+  "main": "index.ts",
+  "types": "index.ts",
+  "files": [
+    "android",
+    "ios",
+    "src",
+    "plugin",
+    "app.plugin.js",
+    "expo-module.config.json",
+    "index.ts",
+    "LICENSE.txt",
+    "UPSTREAM.md",
+    "NOTICE.md"
+  ],
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "pack:check": "npm pack --dry-run"
+  },
+  "keywords": [
+    "expo",
+    "react-native",
+    "mpv",
+    "libmpv",
+    "video",
+    "pip",
+    "hdr",
+    "av1",
+    "mkv"
+  ],
+  "license": "MPL-2.0",
+  "publishConfig": {
+    "access": "public"
+  },
+  "peerDependencies": {
+    "expo": ">=57.0.0",
+    "react": "*",
+    "react-native": "*"
+  },
+  "devDependencies": {
+    "typescript": "^6.0.0"
+  }
+}

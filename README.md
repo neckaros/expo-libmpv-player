@@ -1,0 +1,238 @@
+# expo-libmpv-player
+
+Standalone Expo / React Native libmpv player extracted and adapted from Streamyfin's
+`modules/mpv-player` implementation.
+
+The goal is a reusable native video engine for Expo apps that need broader media support
+than the platform players alone: MKV and other containers, AV1 where the device/build can
+decode it, audio/subtitle track selection, external subtitles, Picture in Picture, HDR-aware
+output paths, hardware decoding and technical playback information.
+
+> **Status:** early standalone extraction (`0.1.0`). The source has been separated from
+> Streamyfin and statically checked, but this repository has not yet been compiled in an
+> Xcode/Gradle device build in this environment. Treat it as a solid starting repo rather
+> than a published production package.
+
+## Platforms
+
+| Platform | Native engine | Minimum | Notes |
+| --- | --- | ---: | --- |
+| iOS | MPVKit / libmpv + AVSampleBufferDisplayLayer | iOS 15.1 | PiP; VideoToolbox; EDR requested on iOS 17+ |
+| tvOS | MPVKit / libmpv + AVSampleBufferDisplayLayer | tvOS 15.1 | HDR display criteria path on tvOS 17+ |
+| Android | `dev.jdtech.mpv:libmpv:1.0.0` | API 26 | MediaCodec hardware decode path; PiP |
+| Web | no libmpv | — | Explicit unsupported fallback |
+
+## Installation
+
+Until you publish the package, install it from a local checkout or your GitHub repository:
+
+```bash
+npm install ../expo-libmpv-player
+# or after pushing it:
+npm install github:YOUR_GITHUB_USER/expo-libmpv-player
+```
+
+Add the config plugin to your Expo config:
+
+```json
+{
+  "expo": {
+    "plugins": ["expo-libmpv-player"]
+  }
+}
+```
+
+The plugin does three things that Streamyfin configures outside its local module:
+
+1. Adds Streamyfin's MPVKit `0.41.0-av5` podspec to the iOS Podfile.
+2. Enables the iOS `audio` background mode used by playback/PiP.
+3. Sets `android:supportsPictureInPicture="true"` on Android `MainActivity`.
+
+Then generate/rebuild native projects:
+
+```bash
+npx expo prebuild --clean
+npx expo run:ios
+# or
+npx expo run:android
+```
+
+This **will not work in Expo Go** because it contains native code. Use an Expo development
+build, EAS build, or local native build.
+
+### Custom MPVKit fork
+
+By default the plugin injects:
+
+```text
+https://raw.githubusercontent.com/streamyfin/MPVKit/0.41.0-av5/MPVKit.podspec
+```
+
+You can override it:
+
+```json
+{
+  "expo": {
+    "plugins": [
+      [
+        "expo-libmpv-player",
+        {
+          "mpvKitPodspecUrl": "https://example.com/your/MPVKit.podspec"
+        }
+      ]
+    ]
+  }
+}
+```
+
+## Basic usage
+
+```tsx
+import { useRef } from "react";
+import { Button, View } from "react-native";
+import {
+  MpvPlayerView,
+  type MpvPlayerViewRef,
+} from "expo-libmpv-player";
+
+export function PlayerScreen() {
+  const player = useRef<MpvPlayerViewRef>(null);
+
+  return (
+    <View style={{ flex: 1, backgroundColor: "black" }}>
+      <MpvPlayerView
+        ref={player}
+        style={{ flex: 1 }}
+        source={{
+          url: "https://example.com/video.mkv",
+          autoplay: true,
+          cacheConfig: {
+            enabled: "auto",
+            cacheSeconds: 20,
+            maxBytes: 200,
+            maxBackBytes: 50,
+          },
+        }}
+        onProgress={({ nativeEvent }) => {
+          console.log(nativeEvent.position, nativeEvent.duration);
+        }}
+        onError={({ nativeEvent }) => {
+          console.error(nativeEvent.error);
+        }}
+      />
+
+      <Button
+        title="Picture in Picture"
+        onPress={() => player.current?.startPictureInPicture()}
+      />
+    </View>
+  );
+}
+```
+
+## Tracks and subtitles
+
+```ts
+const audioTracks = await player.current?.getAudioTracks();
+const subtitleTracks = await player.current?.getSubtitleTracks();
+
+await player.current?.setAudioTrack(audioTracks?.[0]?.id ?? 1);
+await player.current?.setSubtitleTrack(subtitleTracks?.[0]?.id ?? 1);
+await player.current?.addSubtitleFile("https://example.com/subtitles.srt", true);
+```
+
+The view also exposes subtitle positioning/style, playback speed, mute, seeking, zoom-to-fill,
+PiP state and `getTechnicalInfo()`.
+
+## AV1
+
+The native module exposes:
+
+```ts
+import MpvPlayer from "expo-libmpv-player";
+
+const hasHardwareAv1 = MpvPlayer.supportsAv1HardwareDecode();
+```
+
+On Apple platforms this asks VideoToolbox directly. On Android it checks available AV1
+MediaCodec decoders and, on Android 10+, whether a matching decoder reports hardware
+acceleration.
+
+A `false` result does **not** mean libmpv cannot decode AV1 at all: software decoding may
+still work, but high-resolution AV1 can be too expensive for a mobile/TV device.
+
+## HDR
+
+This extraction keeps Streamyfin's HDR-oriented Apple playback path:
+
+- `AVSampleBufferDisplayLayer`
+- Extended Dynamic Range requested on iOS 17+
+- BT.2020 / PQ / HLG inspection through mpv properties
+- tvOS 17+ `AVDisplayCriteria` switching
+- Streamyfin's customized MPVKit fork
+
+HDR should be considered **device- and stream-dependent**. “The file plays” and “the display
+is receiving correct HDR output” are not the same test. Validate HDR10/HLG/Dolby Vision on
+the actual devices you intend to support.
+
+## MKV and codecs
+
+MKV is a container, not a codec. libmpv/FFmpeg gives this player broad container/codec support,
+but actual direct playback depends on the codecs present in the file, the native libmpv build,
+and available hardware/software decoders.
+
+For production, keep a small test corpus covering the combinations you care about, for example:
+
+- MKV + H.264 + AAC
+- MKV + HEVC Main10 + E-AC-3
+- MKV + AV1 10-bit + Opus
+- HDR10 HEVC
+- HLG
+- Dolby Vision profiles you intend to accept
+- embedded ASS/SSA and SRT subtitles
+- external subtitle URLs
+- PiP while subtitles are active
+
+## Public API
+
+`MpvPlayerViewRef` currently exposes:
+
+- play / pause / destroy
+- absolute and relative seek
+- speed and mute
+- current position and duration
+- PiP start / stop / support / active state
+- audio track enumeration and selection
+- subtitle track enumeration and selection
+- external subtitle loading
+- subtitle scale, position, delay, alignment and style
+- fit/fill zoom
+- technical playback information
+
+`VideoSource` supports HTTP headers, external subtitles, start position, autoplay, loop,
+initial audio/subtitle tracks, cache settings and Android MPV VO selection.
+
+## Licensing
+
+The Streamyfin-derived source in this repository remains under **MPL-2.0**. See
+[`LICENSE.txt`](./LICENSE.txt) and [`UPSTREAM.md`](./UPSTREAM.md).
+
+The default iOS dependency is Streamyfin's `MPVKit 0.41.0-av5` fork. Its podspec explicitly
+declares **GPL-3.0**. That is free/open-source software, but GPL distribution obligations can
+matter for the application that links and ships the static framework. If you need a different
+license profile, point `mpvKitPodspecUrl` at a compatible build/fork and verify that it still
+contains the `vo_avfoundation` functionality this module expects.
+
+The Android `dev.jdtech.mpv:libmpv:1.0.0` Maven artifact declares an MIT license for its
+wrapper/project metadata, while its bundled native mpv/FFmpeg components can carry their own
+license obligations. Review the exact binaries you distribute. See [`NOTICE.md`](./NOTICE.md).
+
+## Upstream
+
+This extraction is based on Streamyfin commit:
+
+```text
+4faddc5fd6b0aaa3aef2a6a0ed1640180ededa5d
+```
+
+See `UPSTREAM.md` for the exact provenance and the changes made while extracting the module.
