@@ -26,6 +26,15 @@ final class MPVLayerRenderer {
     private var mpv: OpaquePointer?
     private var running = false
     private var stopping = false
+
+    // Watch AVSampleBufferDisplayLayer failures and bound automatic decoder
+    // recovery. This mirrors Lunarr's hardening: VideoToolbox sessions can be
+    // invalidated during backgrounding/PiP, but an unsupported hardware codec
+    // must not trigger an infinite reset loop.
+    private var statusObservation: NSKeyValueObservation?
+    private static let maxDecoderResets = 3
+    private var decoderResetCount = 0
+    private var configuredHwdec = "videotoolbox"
     private var pendingExternalSubtitles: [String] = []
     private var initialSubtitleId: Int?
     private var initialAudioId: Int?
@@ -45,6 +54,34 @@ final class MPVLayerRenderer {
     init(displayLayer: AVSampleBufferDisplayLayer) {
         self.displayLayer = displayLayer
         queue.setSpecific(key: Self.queueKey, value: true)
+        observeDisplayLayerStatus()
+    }
+
+    private func observeDisplayLayerStatus() {
+        statusObservation?.invalidate()
+        statusObservation = displayLayer.observe(\.status, options: [.new]) { [weak self] layer, _ in
+            guard let self, layer.status == .failed else { return }
+            self.queue.async { [weak self] in self?.performDecoderReset() }
+        }
+    }
+
+    private func performDecoderReset() {
+        guard let handle = mpv else { return }
+        let attempt = decoderResetCount + 1
+        guard attempt <= Self.maxDecoderResets else {
+            Logger.shared.log(
+                "Display layer failed after \(Self.maxDecoderResets) decoder resets; leaving software fallback active",
+                type: "Warn"
+            )
+            return
+        }
+        decoderResetCount = attempt
+        _ = commandSync(handle, ["set", "hwdec", "no"])
+        // On the last retry remain on software decode so an unsupported codec
+        // cannot repeatedly recreate the same failing VideoToolbox session.
+        if attempt < Self.maxDecoderResets {
+            _ = commandSync(handle, ["set", "hwdec", configuredHwdec])
+        }
     }
 
     deinit { stop() }
@@ -65,15 +102,18 @@ final class MPVLayerRenderer {
         tryCheck(mpv_set_option_string(handle, "avfoundation-composite-osd", "yes"))
         #endif
         #if targetEnvironment(simulator)
-        tryCheck(mpv_set_option_string(handle, "hwdec", "no"))
+        configuredHwdec = "no"
         #else
-        tryCheck(mpv_set_option_string(handle, "hwdec", "videotoolbox"))
+        configuredHwdec = "videotoolbox"
         #endif
+        tryCheck(mpv_set_option_string(handle, "hwdec", configuredHwdec))
         tryCheck(mpv_set_option_string(handle, "hwdec-codecs", "all"))
         tryCheck(mpv_set_option_string(handle, "hwdec-software-fallback", "yes"))
         #if os(tvOS)
         tryCheck(mpv_set_option_string(handle, "target-colorspace-hint", "yes"))
-        tryCheck(mpv_set_option_string(handle, "ao", "audiounit"))
+        // AVFoundation handles tvOS Atmos/Continuous Audio Output routes that
+        // can report channel layouts AudioUnit cannot open; keep AudioUnit as fallback.
+        tryCheck(mpv_set_option_string(handle, "ao", "avfoundation,audiounit"))
         #endif
         tryCheck(mpv_set_option_string(handle, "sub-scale-with-window", "no"))
         tryCheck(mpv_set_option_string(handle, "sub-use-margins", "no"))
@@ -89,6 +129,7 @@ final class MPVLayerRenderer {
             guard let ctx else { return }
             Unmanaged<MPVLayerRenderer>.fromOpaque(ctx).takeUnretainedValue().processEvents()
         }, Unmanaged.passUnretained(self).toOpaque())
+        observeDisplayLayerStatus()
         running = true
     }
 
@@ -101,13 +142,12 @@ final class MPVLayerRenderer {
         guard let handle = mpv else { return }
         stopping = true
         running = false
+        statusObservation?.invalidate()
+        statusObservation = nil
         mpv_set_wakeup_callback(handle, nil, nil)
         mpv = nil
         queue.async {
-            "quit".withCString { quit in
-                var args: [UnsafePointer<CChar>?] = [quit, nil]
-                args.withUnsafeMutableBufferPointer { _ = mpv_command(handle, $0.baseAddress) }
-            }
+            Self.quitAndDrain(handle)
             DispatchQueue.global(qos: .userInitiated).async { mpv_terminate_destroy(handle) }
         }
         stopping = false
@@ -139,6 +179,7 @@ final class MPVLayerRenderer {
             self.pendingExternalSubtitles = externalSubtitles ?? []
             self.initialSubtitleId = initialSubtitleId
             self.initialAudioId = initialAudioId
+            self.decoderResetCount = 0
             self.loading = true
             DispatchQueue.main.async { self.delegate?.renderer(self, didChangeLoading: true) }
             self.commandSync(handle, ["stop"])
@@ -215,6 +256,8 @@ final class MPVLayerRenderer {
                 self.delegate?.renderer(self, didChangeLoading: false)
             }
             detectHDRMode()
+        case MPV_EVENT_START_FILE:
+            seeking = false
         case MPV_EVENT_SEEK:
             seeking = true; loading = true
             DispatchQueue.main.async { [weak self] in if let self { self.delegate?.renderer(self, didChangeLoading: true) } }
@@ -222,6 +265,7 @@ final class MPVLayerRenderer {
             seeking = false
             if loading { loading = false; DispatchQueue.main.async { [weak self] in if let self { self.delegate?.renderer(self, didChangeLoading: false) } } }
         case MPV_EVENT_END_FILE:
+            seeking = false
             if let data = event.data?.assumingMemoryBound(to: mpv_event_end_file.self).pointee,
                data.reason == MPV_END_FILE_REASON_EOF {
                 DispatchQueue.main.async { [weak self] in if let self { self.delegate?.rendererDidReachEnd(self) } }
@@ -308,10 +352,50 @@ final class MPVLayerRenderer {
         return result
     }
 
-    func setSubtitleTrack(_ id: Int) { setProperty(name: "sid", value: id < 0 ? "no" : String(id)) }
-    func disableSubtitles() { setProperty(name: "sid", value: "no") }
+    func setSubtitleTrack(_ id: Int) {
+        setProperty(name: "sid", value: id < 0 ? "no" : String(id))
+        applyBidiMode(forTrack: id)
+    }
+    func disableSubtitles() {
+        setProperty(name: "sid", value: "no")
+        applyBidiMode(forTrack: -1)
+    }
     func getCurrentSubtitleTrack(completion: @escaping (Int) -> Void) { getIntProperty("sid", completion: completion) }
-    func addSubtitleFile(url: String, select: Bool = true) { onQueue { [weak self] in if let self, let h = self.mpv { self.commandSync(h, ["sub-add", url, select ? "select" : "cached"]) } } }
+    func addSubtitleFile(url: String, select: Bool = true) {
+        onQueue { [weak self] in
+            guard let self, let h = self.mpv else { return }
+            self.commandSync(h, ["sub-add", url, select ? "select" : "cached"])
+            guard select else { return }
+            var sid: Int64 = -1
+            _ = self.getProperty(h, "sid", MPV_FORMAT_INT64, &sid)
+            self.applyBidiModeOnQueue(handle: h, trackId: Int(sid))
+        }
+    }
+
+    private func applyBidiMode(forTrack trackId: Int) {
+        onQueue { [weak self] in
+            guard let self, let handle = self.mpv else { return }
+            self.applyBidiModeOnQueue(handle: handle, trackId: trackId)
+        }
+    }
+
+    private func applyBidiModeOnQueue(handle: OpaquePointer, trackId: Int) {
+        let codec = trackId >= 0 ? subtitleCodec(handle: handle, trackId: Int64(trackId)) : nil
+        let isAss = codec == "ass" || codec == "ssa"
+        setPropertyOnQueue(handle, "sub-ass-style-overrides", isAss ? "Encoding=-1" : "")
+    }
+
+    private func subtitleCodec(handle: OpaquePointer, trackId: Int64) -> String? {
+        var count: Int64 = 0
+        guard getProperty(handle, "track-list/count", MPV_FORMAT_INT64, &count) >= 0 else { return nil }
+        for i in 0..<count {
+            guard getStringProperty(handle, "track-list/\(i)/type") == "sub" else { continue }
+            var id: Int64 = 0
+            guard getProperty(handle, "track-list/\(i)/id", MPV_FORMAT_INT64, &id) >= 0, id == trackId else { continue }
+            return getStringProperty(handle, "track-list/\(i)/codec")
+        }
+        return nil
+    }
     func setAudioTrack(_ id: Int) { setProperty(name: "aid", value: String(id)) }
     func getCurrentAudioTrack(completion: @escaping (Int) -> Void) { getIntProperty("aid", completion: completion) }
     private func getIntProperty(_ name: String, completion: @escaping (Int) -> Void) { onQueue { [weak self] in guard let self, let h = self.mpv else { completion(0); return }; var v: Int64 = 0; _ = self.getProperty(h, name, MPV_FORMAT_INT64, &v); completion(Int(v)) } }
@@ -320,8 +404,20 @@ final class MPVLayerRenderer {
     func setSubtitleScale(_ v: Double) { setProperty(name: "sub-scale", value: String(v)) }
     func setSubtitleDelay(_ v: Double) { setProperty(name: "sub-delay", value: String(v)) }
     func setAudioDelay(_ v: Double) { setProperty(name: "audio-delay", value: String(v)) }
-    func setVolumeBoost(_ v: Int) { setProperty(name: "volume-max", value: "200"); setProperty(name: "volume", value: String(v)) }
-    func setDialogueBoost(_ enabled: Bool) { setProperty(name: "af", value: enabled ? "lavfi=[equalizer=f=100:t=q:w=1.2:g=-6,equalizer=f=2800:t=q:w=1.2:g=5]" : "") }
+    func setVolumeBoost(_ v: Int) {
+        setProperty(name: "volume-max", value: v > 100 ? "200" : "130")
+        setProperty(name: "volume", value: String(v))
+    }
+    func setDialogueBoost(_ enabled: Bool) {
+        onQueue { [weak self] in
+            guard let self, let h = self.mpv else { return }
+            if enabled {
+                _ = self.commandSync(h, ["af", "add", "@dialogue-boost:lavfi=[equalizer=f=100:t=q:w=1.2:g=-6,equalizer=f=2800:t=q:w=1.2:g=4]"])
+            } else {
+                _ = self.commandSync(h, ["af", "remove", "@dialogue-boost"])
+            }
+        }
+    }
     func setMonoDownmix(_ enabled: Bool) { setProperty(name: "audio-channels", value: enabled ? "mono" : "auto-safe") }
     func setSubtitleMarginY(_ v: Int) { setProperty(name: "sub-margin-y", value: String(v)) }
     func setSubtitleAlignX(_ v: String) { setProperty(name: "sub-align-x", value: v) }
@@ -369,6 +465,21 @@ final class MPVLayerRenderer {
             string("vo", "voDriver"); string("hwdec-current", "hwdec"); double("estimated-vf-fps", "estimatedVfFps")
             string("video-params/gamma", "colorTransfer"); string("video-params/primaries", "colorSpace")
             completion(info)
+        }
+    }
+
+
+    private static func quitAndDrain(_ handle: OpaquePointer) {
+        "quit".withCString { quit in
+            var args: [UnsafePointer<CChar>?] = [quit, nil]
+            args.withUnsafeMutableBufferPointer { buffer in
+                _ = mpv_command(handle, buffer.baseAddress)
+            }
+        }
+        var drainCount = 0
+        while drainCount < 100, let event = mpv_wait_event(handle, 0.1)?.pointee {
+            if event.event_id == MPV_EVENT_NONE || event.event_id == MPV_EVENT_SHUTDOWN { break }
+            drainCount += 1
         }
     }
 

@@ -4,6 +4,7 @@ import android.content.Context
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
+import android.system.Os
 import android.util.Log
 import android.view.Surface
 import android.view.SurfaceView
@@ -11,6 +12,7 @@ import android.view.View
 import expo.modules.mpvplayer.nativeplayer.MpvOwnership
 import expo.modules.mpvplayer.nativeplayer.engine.PlayerEngine
 import expo.modules.mpvplayer.nativeplayer.engine.VideoLoadConfig
+import java.io.File
 import java.util.Locale
 
 private fun normalizeVideoDimensions(width: Int, height: Int, rotation: Int): Pair<Int, Int> {
@@ -50,21 +52,21 @@ class MPVLayerRenderer(
     private var activeToken: Any? = null
     private var currentConfig: VideoLoadConfig? = null
     private var pendingExternalSubtitles = emptyList<String>()
-    private var activeExternalSubtitles = emptyList<String>()
-    private var initialSubtitleId: Int? = null
-    private var initialAudioId: Int? = null
+    @Volatile private var activeExternalSubtitles = emptyList<String>()
+    @Volatile private var initialSubtitleId: Int? = null
+    @Volatile private var initialAudioId: Int? = null
     private var muted = false
     private var zoomed = false
-    private var cachedCacheSeconds = 0.0
+    @Volatile private var cachedCacheSeconds = 0.0
     private var rotation = 0
-    private var _videoWidth = 0
-    private var _videoHeight = 0
-    private var _position = 0.0
-    private var _duration = 0.0
-    private var _paused = true
+    @Volatile private var _videoWidth = 0
+    @Volatile private var _videoHeight = 0
+    @Volatile private var _position = 0.0
+    @Volatile private var _duration = 0.0
+    @Volatile private var _paused = true
     private var speed = 1.0
-    private var loading = false
-    private var seeking = false
+    @Volatile private var loading = false
+    @Volatile private var seeking = false
     private var lastProgressMs = 0L
 
     override val videoWidth: Int get() = _videoWidth
@@ -97,6 +99,24 @@ class MPVLayerRenderer(
                     val instance = MPVLib.create(context)
                     mpv = instance
                     instance.addObserver(this)
+
+                    // Give fontconfig stable writable config/cache locations.
+                    // libmpv 1.0 otherwise re-scans system fonts repeatedly on some
+                    // devices, which is costly during subtitle/seek activity.
+                    val mpvDir = File(context.getExternalFilesDir(null) ?: context.filesDir, "mpv")
+                    if (!mpvDir.exists()) mpvDir.mkdirs()
+                    try {
+                        val cacheDir = context.cacheDir.absolutePath
+                        val configDir = (context.getExternalFilesDir(null) ?: context.filesDir).absolutePath
+                        Os.setenv("XDG_CACHE_HOME", cacheDir, true)
+                        Os.setenv("XDG_CONFIG_HOME", configDir, true)
+                        Os.setenv("HOME", configDir, true)
+                    } catch (e: Exception) {
+                        Log.w(TAG, "Could not configure fontconfig environment: ${e.message}")
+                    }
+                    instance.setOptionString("config", "yes")
+                    instance.setOptionString("config-dir", mpvDir.path)
+
                     instance.setOptionString("vo", voDriver)
                     instance.setOptionString("gpu-context", "android")
                     instance.setOptionString("opengl-es", "yes")
@@ -105,7 +125,9 @@ class MPVLayerRenderer(
                     when {
                         isEmulator() -> instance.setOptionString("hwdec", "no")
                         isTv -> {
-                            instance.setOptionString("hwdec", "mediacodec")
+                            // Zero-copy mediacodec wedges some low-end TV SoCs;
+                            // copy mode is more robust and matches Lunarr 1.1.1.
+                            instance.setOptionString("hwdec", "mediacodec-copy")
                             instance.setOptionString("profile", "fast")
                             instance.setOptionString("demuxer-seekable-cache", "no")
                             instance.setOptionString("audio-buffer", "0.5")
@@ -116,6 +138,9 @@ class MPVLayerRenderer(
                     instance.setOptionString("hr-seek-framedrop", "yes")
                     instance.setOptionString("sub-scale-with-window", "no")
                     instance.setOptionString("sub-use-margins", "no")
+                    instance.setOptionString("subs-match-os-language", "yes")
+                    instance.setOptionString("subs-fallback", "yes")
+                    instance.setOptionString("sub-vsfilter-bidi-compat", "yes")
                     instance.setOptionString("keep-open", "always")
                     instance.setOptionString("force-window", "no")
                     instance.initialize()
@@ -144,8 +169,13 @@ class MPVLayerRenderer(
         mpv = null
         running = false
         currentConfig = null
+        pendingExternalSubtitles = emptyList()
+        activeExternalSubtitles = emptyList()
+        initialSubtitleId = null
+        initialAudioId = null
         _position = 0.0
         _duration = 0.0
+        cachedCacheSeconds = 0.0
         if (instance == null) {
             token?.let(MpvOwnership::release)
             return
@@ -294,11 +324,33 @@ class MPVLayerRenderer(
 
     override fun setSubtitleTrack(trackId: Int) {
         if (trackId < 0) mpv?.setPropertyString("sid", "no") else mpv?.setPropertyInt("sid", trackId)
+        applyBidiModeFor(trackId)
     }
-    override fun disableSubtitles() { mpv?.setPropertyString("sid", "no") }
+
+    private fun applyBidiModeFor(trackId: Int) {
+        val codec = if (trackId >= 0) subtitleCodecFor(trackId) else null
+        val isAss = codec == "ass" || codec == "ssa"
+        mpv?.setPropertyString("sub-ass-style-overrides", if (isAss) "Encoding=-1" else "")
+    }
+
+    private fun subtitleCodecFor(trackId: Int): String? {
+        val count = mpv?.getPropertyInt("track-list/count") ?: return null
+        for (i in 0 until count) {
+            if (mpv?.getPropertyString("track-list/$i/type") != "sub") continue
+            if (mpv?.getPropertyInt("track-list/$i/id") != trackId) continue
+            return mpv?.getPropertyString("track-list/$i/codec")
+        }
+        return null
+    }
+
+    override fun disableSubtitles() {
+        mpv?.setPropertyString("sid", "no")
+        applyBidiModeFor(-1)
+    }
     override fun getCurrentSubtitleTrack(): Int = mpv?.getPropertyInt("sid") ?: 0
     override fun addSubtitleFile(url: String, select: Boolean) {
         mpv?.command(arrayOf("sub-add", url, if (select) "select" else "cached"))
+        if (select) applyBidiModeFor(mpv?.getPropertyInt("sid") ?: -1)
         if (url !in activeExternalSubtitles) activeExternalSubtitles = activeExternalSubtitles + url
     }
     override fun setAudioTrack(trackId: Int) { mpv?.setPropertyInt("aid", trackId) }
@@ -336,9 +388,19 @@ class MPVLayerRenderer(
     }
 
     override fun setAudioDelay(seconds: Double) { mpv?.setPropertyDouble("audio-delay", seconds) }
-    override fun setVolumeBoost(percent: Int) { mpv?.setPropertyInt("volume-max", 200); mpv?.setPropertyInt("volume", percent) }
+    override fun setVolumeBoost(percent: Int) {
+        mpv?.setPropertyInt("volume-max", if (percent > 100) 200 else 130)
+        mpv?.setPropertyInt("volume", percent)
+    }
     override fun setDialogueBoost(enabled: Boolean) {
-        mpv?.setPropertyString("af", if (enabled) "lavfi=[equalizer=f=100:t=q:w=1.2:g=-6,equalizer=f=2800:t=q:w=1.2:g=5]" else "")
+        if (enabled) {
+            mpv?.command(arrayOf(
+                "af", "add",
+                "@dialogue-boost:lavfi=[equalizer=f=100:t=q:w=1.2:g=-6,equalizer=f=2800:t=q:w=1.2:g=4]"
+            ))
+        } else {
+            mpv?.command(arrayOf("af", "remove", "@dialogue-boost"))
+        }
     }
     override fun setMonoDownmix(enabled: Boolean) { mpv?.setPropertyString("audio-channels", if (enabled) "mono" else "auto-safe") }
     override fun setZoomedToFill(zoomed: Boolean) { this.zoomed = zoomed; mpv?.setPropertyDouble("panscan", if (zoomed) 1.0 else 0.0) }
@@ -399,7 +461,12 @@ class MPVLayerRenderer(
             }
             MPVLib.MPV_EVENT_SEEK -> { seeking = true; loading = true; main.post { delegate?.onLoadingChanged(true) } }
             MPVLib.MPV_EVENT_PLAYBACK_RESTART -> { seeking = false; if (loading) { loading = false; main.post { delegate?.onLoadingChanged(false) } } }
-            MPVLib.MPV_EVENT_END_FILE -> if (mpv?.getPropertyBoolean("eof-reached") == true) main.post { delegate?.onPlaybackEnded() }
+            MPVLib.MPV_EVENT_END_FILE -> {
+                // Genuine EOF is emitted via the eof-reached property. END_FILE
+                // also fires for stop/reload, so do not dispatch onEnd here.
+                seeking = false
+            }
+            MPVLib.MPV_EVENT_START_FILE -> { seeking = false }
         }
     }
 

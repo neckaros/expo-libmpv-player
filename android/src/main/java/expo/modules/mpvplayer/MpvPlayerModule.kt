@@ -82,11 +82,15 @@ class MpvPlayerModule : Module() {
             AsyncFunction("getAudioTracks") { view: MpvPlayerView -> view.getAudioTracks() }
             AsyncFunction("setAudioTrack") { view: MpvPlayerView, id: Int -> view.setAudioTrack(id) }
             AsyncFunction("getCurrentAudioTrack") { view: MpvPlayerView -> view.getCurrentAudioTrack() }
+            AsyncFunction("setAudioDelay") { view: MpvPlayerView, seconds: Double -> view.setAudioDelay(seconds) }
+            AsyncFunction("setVolumeBoost") { view: MpvPlayerView, percent: Int -> view.setVolumeBoost(percent) }
+            AsyncFunction("setDialogueBoost") { view: MpvPlayerView, enabled: Boolean -> view.setDialogueBoost(enabled) }
+            AsyncFunction("setMonoDownmix") { view: MpvPlayerView, enabled: Boolean -> view.setMonoDownmix(enabled) }
             AsyncFunction("setZoomedToFill") { view: MpvPlayerView, zoomed: Boolean -> view.setZoomedToFill(zoomed) }
             AsyncFunction("isZoomedToFill") { view: MpvPlayerView -> view.isZoomedToFill() }
             AsyncFunction("getTechnicalInfo") { view: MpvPlayerView -> view.getTechnicalInfo() }
 
-            Events("onLoad", "onPlaybackStateChange", "onProgress", "onError", "onTracksReady", "onPictureInPictureChange")
+            Events("onLoad", "onPlaybackStateChange", "onProgress", "onError", "onTracksReady", "onPictureInPictureChange", "onEnd")
         }
     }
 }

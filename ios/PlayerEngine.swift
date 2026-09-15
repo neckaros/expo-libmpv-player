@@ -152,6 +152,10 @@ final class MPVPlayerEngine: NSObject {
     func getAudioTracks(completion: @escaping ([[String: Any]]) -> Void) { renderer.getAudioTracks(completion: completion) }
     func setAudioTrack(_ id: Int) { renderer.setAudioTrack(id) }
     func getCurrentAudioTrack(completion: @escaping (Int) -> Void) { renderer.getCurrentAudioTrack(completion: completion) }
+    func setAudioDelay(_ seconds: Double) { renderer.setAudioDelay(seconds) }
+    func setVolumeBoost(_ percent: Int) { renderer.setVolumeBoost(percent) }
+    func setDialogueBoost(_ enabled: Bool) { renderer.setDialogueBoost(enabled) }
+    func setMonoDownmix(_ enabled: Bool) { renderer.setMonoDownmix(enabled) }
     func setSubtitlePosition(_ v: Int) { renderer.setSubtitlePosition(v) }
     func setSubtitleScale(_ v: Double) { renderer.setSubtitleScale(v) }
     func setSubtitleDelay(_ v: Double) { renderer.setSubtitleDelay(v) }

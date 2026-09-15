@@ -52,6 +52,7 @@ class MPVLib private constructor(private val instance: LibMPV) {
             return wrapper
         }
         const val MPV_EVENT_SHUTDOWN = 1
+        const val MPV_EVENT_START_FILE = 6
         const val MPV_EVENT_END_FILE = 7
         const val MPV_EVENT_FILE_LOADED = 8
         const val MPV_EVENT_SEEK = 20

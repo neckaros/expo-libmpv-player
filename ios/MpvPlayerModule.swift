@@ -92,11 +92,15 @@ public class MpvPlayerModule: Module {
             AsyncFunction("getAudioTracks") { (view: MpvPlayerView, promise: Promise) in view.getAudioTracks { promise.resolve($0) } }
             AsyncFunction("setAudioTrack") { (view: MpvPlayerView, id: Int) in view.setAudioTrack(id) }
             AsyncFunction("getCurrentAudioTrack") { (view: MpvPlayerView, promise: Promise) in view.getCurrentAudioTrack { promise.resolve($0) } }
+            AsyncFunction("setAudioDelay") { (view: MpvPlayerView, seconds: Double) in view.setAudioDelay(seconds) }
+            AsyncFunction("setVolumeBoost") { (view: MpvPlayerView, percent: Int) in view.setVolumeBoost(percent) }
+            AsyncFunction("setDialogueBoost") { (view: MpvPlayerView, enabled: Bool) in view.setDialogueBoost(enabled) }
+            AsyncFunction("setMonoDownmix") { (view: MpvPlayerView, enabled: Bool) in view.setMonoDownmix(enabled) }
             AsyncFunction("setZoomedToFill") { (view: MpvPlayerView, v: Bool) in view.setZoomedToFill(v) }
             AsyncFunction("isZoomedToFill") { (view: MpvPlayerView) -> Bool in view.isZoomedToFill() }
             AsyncFunction("getTechnicalInfo") { (view: MpvPlayerView, promise: Promise) in view.getTechnicalInfo { promise.resolve($0) } }
 
-            Events("onLoad", "onPlaybackStateChange", "onProgress", "onError", "onTracksReady", "onPictureInPictureChange")
+            Events("onLoad", "onPlaybackStateChange", "onProgress", "onError", "onTracksReady", "onPictureInPictureChange", "onEnd")
         }
     }
 }

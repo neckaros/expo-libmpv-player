@@ -1,7 +1,6 @@
 # Dependency and license notice
 
-This repository contains Streamyfin-derived source code under **MPL-2.0**. See
-`LICENSE.txt` and `UPSTREAM.md`.
+This repository contains Streamyfin-derived source code and selected improvements adapted from `lunarr-app/mpv-player`, both under **MPL-2.0**. See `LICENSE.txt` and `UPSTREAM.md`.
 
 ## Default Apple dependency
 

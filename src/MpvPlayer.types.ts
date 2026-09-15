@@ -17,6 +17,7 @@ export type OnProgressEventPayload = {
 export type OnErrorEventPayload = { error: string };
 export type OnTracksReadyEventPayload = Record<string, never>;
 export type OnPictureInPictureChangePayload = { isActive: boolean };
+export type OnEndEventPayload = Record<string, never>;
 
 export type NowPlayingMetadata = {
   title?: string;
@@ -62,6 +63,8 @@ export type MpvPlayerViewProps = {
   onError?: (event: { nativeEvent: OnErrorEventPayload }) => void;
   onTracksReady?: (event: { nativeEvent: OnTracksReadyEventPayload }) => void;
   onPictureInPictureChange?: (event: { nativeEvent: OnPictureInPictureChangePayload }) => void;
+  /** Fired only when playback reaches a genuine end-of-file, not on stop/reload. */
+  onEnd?: (event: { nativeEvent: OnEndEventPayload }) => void;
 };
 
 export interface SubtitleStyleConfig {
@@ -95,7 +98,7 @@ export interface MpvPlayerViewRef {
   addSubtitleFile: (url: string, select?: boolean) => Promise<void>;
   setSubtitlePosition: (position: number) => Promise<void>;
   setSubtitleScale: (scale: number) => Promise<void>;
-  setSubtitleDelay?: (seconds: number) => Promise<void>;
+  setSubtitleDelay: (seconds: number) => Promise<void>;
   setSubtitleMarginY: (margin: number) => Promise<void>;
   setSubtitleAlignX: (alignment: "left" | "center" | "right") => Promise<void>;
   setSubtitleAlignY: (alignment: "top" | "center" | "bottom") => Promise<void>;
@@ -107,6 +110,12 @@ export interface MpvPlayerViewRef {
   getAudioTracks: () => Promise<AudioTrack[]>;
   setAudioTrack: (trackId: number) => Promise<void>;
   getCurrentAudioTrack: () => Promise<number>;
+  setAudioDelay: (seconds: number) => Promise<void>;
+  /** Soft-volume percentage. 100 = neutral; values above 100 boost volume. */
+  setVolumeBoost: (percent: number) => Promise<void>;
+  /** Enables a speech-presence EQ without replacing mpv's other audio filters. */
+  setDialogueBoost: (enabled: boolean) => Promise<void>;
+  setMonoDownmix: (enabled: boolean) => Promise<void>;
   setZoomedToFill: (zoomed: boolean) => Promise<void>;
   isZoomedToFill: () => Promise<boolean>;
   getTechnicalInfo: () => Promise<TechnicalInfo>;

@@ -1,5 +1,6 @@
 const {
   withAndroidManifest,
+  withGradleProperties,
   withInfoPlist,
   withPodfile,
 } = require("expo/config-plugins");
@@ -7,10 +8,14 @@ const {
 const DEFAULT_MPVKIT_PODSPEC =
   "https://raw.githubusercontent.com/streamyfin/MPVKit/0.41.0-av5/MPVKit.podspec";
 
+// dev.jdtech.mpv:libmpv:1.0.0 is built against a newer libc++; Expo's
+// older default NDK can crash at load time on __from_chars_floating_point.
+const DEFAULT_ANDROID_NDK_VERSION = "29.0.14206865";
+
 function withMpvKitPod(config, options = {}) {
-  const podspecUrl = options.mpvKitPodspecUrl || DEFAULT_MPVKIT_PODSPEC;
+  const podspecUrl = options.mpvKitPodspecUrl || options.podspecUrl || DEFAULT_MPVKIT_PODSPEC;
   return withPodfile(config, (mod) => {
-    const podName = "MPVKit";
+    const podName = options.mpvKitPodName || options.podName || "MPVKit";
     const podLine = `  pod '${podName}', :podspec => '${podspecUrl}'`;
     const escapedName = podName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     const existingPod = new RegExp(
@@ -33,7 +38,22 @@ function withMpvKitPod(config, options = {}) {
   });
 }
 
-function withIosBackgroundAudio(config) {
+function withAndroidNdk(config, options = {}) {
+  const ndkVersion = options.androidNdkVersion || DEFAULT_ANDROID_NDK_VERSION;
+  return withGradleProperties(config, (mod) => {
+    const props = mod.modResults;
+    const index = props.findIndex(
+      (item) => item.type === "property" && item.key === "ndkVersion",
+    );
+    const property = { type: "property", key: "ndkVersion", value: ndkVersion };
+    if (index >= 0) props.splice(index, 1, property);
+    else props.push(property);
+    return mod;
+  });
+}
+
+function withIosBackgroundAudio(config, options = {}) {
+  if (options.enablePictureInPicture === false) return config;
   return withInfoPlist(config, (mod) => {
     const modes = Array.isArray(mod.modResults.UIBackgroundModes)
       ? [...mod.modResults.UIBackgroundModes]
@@ -44,7 +64,8 @@ function withIosBackgroundAudio(config) {
   });
 }
 
-function withAndroidPip(config) {
+function withAndroidPip(config, options = {}) {
+  if (options.enablePictureInPicture === false) return config;
   return withAndroidManifest(config, (mod) => {
     const application = mod.modResults.manifest.application?.[0];
     if (!application) return mod;
@@ -63,10 +84,12 @@ function withAndroidPip(config) {
 }
 
 module.exports = function withLibmpv(config, options = {}) {
+  config = withAndroidNdk(config, options);
   config = withMpvKitPod(config, options);
-  config = withIosBackgroundAudio(config);
-  config = withAndroidPip(config);
+  config = withIosBackgroundAudio(config, options);
+  config = withAndroidPip(config, options);
   return config;
 };
 
 module.exports.DEFAULT_MPVKIT_PODSPEC = DEFAULT_MPVKIT_PODSPEC;
+module.exports.DEFAULT_ANDROID_NDK_VERSION = DEFAULT_ANDROID_NDK_VERSION;

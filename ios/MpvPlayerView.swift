@@ -26,6 +26,7 @@ class MpvPlayerView: ExpoView {
     let onError = EventDispatcher()
     let onTracksReady = EventDispatcher()
     let onPictureInPictureChange = EventDispatcher()
+    let onEnd = EventDispatcher()
 
     required init(appContext: AppContext? = nil) {
         super.init(appContext: appContext)
@@ -77,6 +78,10 @@ class MpvPlayerView: ExpoView {
     func getAudioTracks(completion: @escaping ([[String: Any]]) -> Void) { engine.getAudioTracks(completion: completion) }
     func setAudioTrack(_ id: Int) { engine.setAudioTrack(id) }
     func getCurrentAudioTrack(completion: @escaping (Int) -> Void) { engine.getCurrentAudioTrack(completion: completion) }
+    func setAudioDelay(_ seconds: Double) { engine.setAudioDelay(seconds) }
+    func setVolumeBoost(_ percent: Int) { engine.setVolumeBoost(percent) }
+    func setDialogueBoost(_ enabled: Bool) { engine.setDialogueBoost(enabled) }
+    func setMonoDownmix(_ enabled: Bool) { engine.setMonoDownmix(enabled) }
     func setSubtitlePosition(_ v: Int) { engine.setSubtitlePosition(v) }
     func setSubtitleScale(_ v: Double) { engine.setSubtitleScale(v) }
     func setSubtitleDelay(_ v: Double) { engine.setSubtitleDelay(v) }
@@ -111,7 +116,7 @@ extension MpvPlayerView: MPVPlayerEngineDelegate {
         setDisplayCriteria(for: mode, fps: Float(fps))
         #endif
     }
-    func engineDidReachEnd(_ engine: MPVPlayerEngine) {}
+    func engineDidReachEnd(_ engine: MPVPlayerEngine) { onEnd([:]) }
 }
 
 #if os(tvOS)

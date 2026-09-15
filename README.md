@@ -1,17 +1,13 @@
 # expo-libmpv-player
 
-Standalone Expo / React Native libmpv player extracted and adapted from Streamyfin's
-`modules/mpv-player` implementation.
+Standalone Expo / React Native libmpv player extracted and adapted from Streamyfin's `modules/mpv-player` implementation, with selected stability and playback improvements synchronized from `@lunarr/mpv-player` 1.1.1.
 
 The goal is a reusable native video engine for Expo apps that need broader media support
 than the platform players alone: MKV and other containers, AV1 where the device/build can
 decode it, audio/subtitle track selection, external subtitles, Picture in Picture, HDR-aware
 output paths, hardware decoding and technical playback information.
 
-> **Status:** early standalone extraction (`0.1.0`). The source has been separated from
-> Streamyfin and statically checked, but this repository has not yet been compiled in an
-> Xcode/Gradle device build in this environment. Treat it as a solid starting repo rather
-> than a published production package.
+> **Status:** standalone native module (`0.2.0`). The source has been separated from Streamyfin, merged with selected Lunarr hardening, and statically checked, but this repository has not yet been compiled in a full Xcode/Gradle device build in this environment. Treat it as a testable native-module repo rather than a production-certified player.
 
 ## Platforms
 
@@ -42,11 +38,12 @@ Add the config plugin to your Expo config:
 }
 ```
 
-The plugin does three things that Streamyfin configures outside its local module:
+The plugin configures the native dependencies and PiP requirements that the source module cannot express by itself:
 
-1. Adds Streamyfin's MPVKit `0.41.0-av5` podspec to the iOS Podfile.
+1. Adds Streamyfin's MPVKit `0.41.0-av5` podspec to the iOS Podfile by default.
 2. Enables the iOS `audio` background mode used by playback/PiP.
 3. Sets `android:supportsPictureInPicture="true"` on Android `MainActivity`.
+4. Pins Android NDK `29.0.14206865` for compatibility with `dev.jdtech.mpv:libmpv:1.0.0`.
 
 Then generate/rebuild native projects:
 
@@ -77,7 +74,9 @@ You can override it:
       [
         "expo-libmpv-player",
         {
-          "mpvKitPodspecUrl": "https://example.com/your/MPVKit.podspec"
+          "mpvKitPodspecUrl": "https://example.com/your/MPVKit.podspec",
+          "androidNdkVersion": "29.0.14206865",
+          "enablePictureInPicture": true
         }
       ]
     ]
@@ -141,8 +140,11 @@ await player.current?.setSubtitleTrack(subtitleTracks?.[0]?.id ?? 1);
 await player.current?.addSubtitleFile("https://example.com/subtitles.srt", true);
 ```
 
-The view also exposes subtitle positioning/style, playback speed, mute, seeking, zoom-to-fill,
-PiP state and `getTechnicalInfo()`.
+The view also exposes subtitle positioning/style, playback speed, mute, seeking, zoom-to-fill, audio delay/boost/mono/dialogue controls, PiP state, genuine-EOF `onEnd`, and `getTechnicalInfo()`.
+
+## Lunarr 1.1.1 hardening merged in 0.2.0
+
+This fork selectively incorporates the useful native fixes from Lunarr rather than replacing the module wholesale. The merge includes Android TV `mediacodec-copy`, NDK 29 pinning, improved PiP/surface recovery, genuine EOF signaling, ASS/SSA bidi handling, safer dialogue/volume filters, tvOS AVFoundation audio fallback, and bounded Apple display-layer decoder recovery. Our existing loop, mute and richer subtitle-style API remain available.
 
 ## AV1
 
@@ -203,11 +205,13 @@ For production, keep a small test corpus covering the combinations you care abou
 - current position and duration
 - PiP start / stop / support / active state
 - audio track enumeration and selection
+- audio delay, soft-volume boost, dialogue EQ and mono downmix
 - subtitle track enumeration and selection
 - external subtitle loading
 - subtitle scale, position, delay, alignment and style
 - fit/fill zoom
 - technical playback information
+- genuine EOF `onEnd` event
 
 `VideoSource` supports HTTP headers, external subtitles, start position, autoplay, loop,
 initial audio/subtitle tracks, cache settings and Android MPV VO selection.
@@ -229,10 +233,10 @@ license obligations. Review the exact binaries you distribute. See [`NOTICE.md`]
 
 ## Upstream
 
-This extraction is based on Streamyfin commit:
+The original extraction is based on Streamyfin commit:
 
 ```text
 4faddc5fd6b0aaa3aef2a6a0ed1640180ededa5d
 ```
 
-See `UPSTREAM.md` for the exact provenance and the changes made while extracting the module.
+Version 0.2.0 also imports selected fixes from `lunarr-app/mpv-player` / `@lunarr/mpv-player` 1.1.1 while retaining this fork's extra API. See `UPSTREAM.md` and `CHANGELOG.md` for provenance and the exact synchronization scope.

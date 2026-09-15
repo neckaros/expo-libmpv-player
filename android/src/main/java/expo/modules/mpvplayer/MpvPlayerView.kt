@@ -1,7 +1,14 @@
 package expo.modules.mpvplayer
 
+import android.app.Activity
+import android.app.Application
 import android.content.Context
+import android.content.ContextWrapper
 import android.graphics.Color
+import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
+import android.util.Log
 import android.view.SurfaceHolder
 import android.view.SurfaceView
 import android.view.ViewGroup
@@ -14,12 +21,18 @@ import expo.modules.mpvplayer.nativeplayer.engine.VideoLoadConfig
 class MpvPlayerView(context: Context, appContext: AppContext) : ExpoView(context, appContext),
     PlayerEngine.Delegate, SurfaceHolder.Callback {
 
+    companion object {
+        private const val TAG = "MpvPlayerView"
+        private const val RESUME_RECOVERY_DELAY_MS = 300L
+    }
+
     val onLoad by EventDispatcher()
     val onPlaybackStateChange by EventDispatcher()
     val onProgress by EventDispatcher()
     val onError by EventDispatcher()
     val onTracksReady by EventDispatcher()
     val onPictureInPictureChange by EventDispatcher()
+    val onEnd by EventDispatcher()
 
     private val surfaceView = SurfaceView(context)
     private var renderer: MPVLayerRenderer? = null
@@ -33,6 +46,12 @@ class MpvPlayerView(context: Context, appContext: AppContext) : ExpoView(context
     private var cachedPosition = 0.0
     private var cachedDuration = 0.0
     private var zoomed = false
+    private var intendedPlayState = false
+    private val uiHandler = Handler(Looper.getMainLooper())
+    private var hostActivity: Activity? = null
+    private var lifecycleCallbacks: Application.ActivityLifecycleCallbacks? = null
+    private var lifecycleRegistered = false
+    private val recoverResumeRunnable = Runnable { runResumeRecovery() }
 
     init {
         setBackgroundColor(Color.BLACK)
@@ -41,6 +60,13 @@ class MpvPlayerView(context: Context, appContext: AppContext) : ExpoView(context
             ViewGroup.LayoutParams.MATCH_PARENT,
         )
         surfaceView.holder.addCallback(this)
+        surfaceView.addOnLayoutChangeListener { _, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom ->
+            val w = right - left
+            val h = bottom - top
+            val oldW = oldRight - oldLeft
+            val oldH = oldBottom - oldTop
+            if (w > 0 && h > 0 && (w != oldW || h != oldH)) renderer?.updateSurfaceSize(w, h)
+        }
         addView(surfaceView)
         pipController.setPlayerView(surfaceView)
         pipController.delegate = object : PiPController.Delegate {
@@ -48,9 +74,13 @@ class MpvPlayerView(context: Context, appContext: AppContext) : ExpoView(context
             override fun onPause() = pause()
             override fun onSeekBy(seconds: Double) = seekBy(seconds)
             override fun onPictureInPictureModeChanged(isInPiP: Boolean) {
+                uiHandler.removeCallbacksAndMessages(null)
+                uiHandler.postDelayed({ syncSurfaceSizeToView() }, 100)
+                if (isInPiP) uiHandler.postDelayed({ syncSurfaceSizeToView() }, 500)
                 onPictureInPictureChange(mapOf("isActive" to isInPiP))
             }
         }
+        registerLifecycleCallbacks()
     }
 
     private fun ensureRendererStarted(voDriver: String?) {
@@ -64,8 +94,9 @@ class MpvPlayerView(context: Context, appContext: AppContext) : ExpoView(context
         renderer?.delegate = this
         renderer?.start(PlayerEngine.Owner.EMBEDDED_VIEW) {
             rendererStarted = true
+            renderer?.playbackResumeIntent = intendedPlayState
             surfaceView.holder.surface?.takeIf { it.isValid }?.let { renderer?.attachSurface(it) }
-            if (surfaceView.width > 0 && surfaceView.height > 0) renderer?.updateSurfaceSize(surfaceView.width, surfaceView.height)
+            syncSurfaceSizeToView()
             loadPending()
         }
     }
@@ -84,7 +115,10 @@ class MpvPlayerView(context: Context, appContext: AppContext) : ExpoView(context
 
     override fun surfaceCreated(holder: SurfaceHolder) {
         surfaceReady = true
-        if (rendererStarted) renderer?.attachSurface(holder.surface)
+        if (rendererStarted) {
+            renderer?.attachSurface(holder.surface)
+            syncSurfaceSizeToView()
+        }
         pendingConfig?.let { ensureRendererStarted(it.voDriver) }
     }
 
@@ -103,13 +137,24 @@ class MpvPlayerView(context: Context, appContext: AppContext) : ExpoView(context
         if (surfaceReady) ensureRendererStarted(config.voDriver)
     }
 
-    fun play() { renderer?.play(); pipController.setPlaybackRate(1.0) }
-    fun pause() { renderer?.pause(); pipController.setPlaybackRate(0.0) }
+    fun play() {
+        intendedPlayState = true
+        renderer?.playbackResumeIntent = true
+        renderer?.play()
+        pipController.setPlaybackRate(1.0)
+    }
+    fun pause() {
+        intendedPlayState = false
+        renderer?.playbackResumeIntent = false
+        renderer?.pause()
+        pipController.setPlaybackRate(0.0)
+    }
     fun destroy() {
         renderer?.stop()
         rendererStarted = false
         pendingConfig = null
         currentUrl = null
+        intendedPlayState = false
     }
     fun seekTo(position: Double) = renderer?.seekTo(position) ?: Unit
     fun seekBy(offset: Double) = renderer?.seekBy(offset) ?: Unit
@@ -144,6 +189,10 @@ class MpvPlayerView(context: Context, appContext: AppContext) : ExpoView(context
     fun getAudioTracks(): List<Map<String, Any>> = renderer?.getAudioTracks() ?: emptyList()
     fun setAudioTrack(trackId: Int) = renderer?.setAudioTrack(trackId) ?: Unit
     fun getCurrentAudioTrack(): Int = renderer?.getCurrentAudioTrack() ?: 0
+    fun setAudioDelay(seconds: Double) = renderer?.setAudioDelay(seconds) ?: Unit
+    fun setVolumeBoost(percent: Int) = renderer?.setVolumeBoost(percent) ?: Unit
+    fun setDialogueBoost(enabled: Boolean) = renderer?.setDialogueBoost(enabled) ?: Unit
+    fun setMonoDownmix(enabled: Boolean) = renderer?.setMonoDownmix(enabled) ?: Unit
     fun setZoomedToFill(value: Boolean) { zoomed = value; renderer?.setZoomedToFill(value) }
     fun isZoomedToFill(): Boolean = zoomed
     fun getTechnicalInfo(): Map<String, Any> = renderer?.getTechnicalInfo() ?: emptyMap()
@@ -162,9 +211,68 @@ class MpvPlayerView(context: Context, appContext: AppContext) : ExpoView(context
     override fun onTracksReady() = onTracksReady(emptyMap<String, Any>())
     override fun onError(message: String) = onError(mapOf("error" to message))
     override fun onVideoDimensionsChanged(width: Int, height: Int) = pipController.setVideoDimensions(width, height)
+    override fun onPlaybackEnded() = onEnd(emptyMap<String, Any>())
+
+    private fun syncSurfaceSizeToView() {
+        if (!surfaceReady) return
+        val w = surfaceView.width
+        val h = surfaceView.height
+        if (w > 0 && h > 0) renderer?.updateSurfaceSize(w, h)
+    }
+
+    private fun runResumeRecovery() {
+        if (!rendererStarted || currentUrl == null) return
+        if (pipController.isPictureInPictureActive()) return
+        if (intendedPlayState) return
+        val surface = surfaceView.holder.surface?.takeIf { it.isValid }
+        Log.i(TAG, "Resume recovery: paused, surfaceValid=${surface != null}")
+        renderer?.recoverVideoOutput(surface)
+    }
+
+    private fun registerLifecycleCallbacks() {
+        if (lifecycleRegistered || !DeviceKind.isTelevision(context)) return
+        val app = context.applicationContext as? Application ?: return
+        lifecycleCallbacks = object : Application.ActivityLifecycleCallbacks {
+            override fun onActivityCreated(activity: Activity, savedInstanceState: Bundle?) {}
+            override fun onActivityStarted(activity: Activity) {}
+            override fun onActivityResumed(activity: Activity) {
+                val host = hostActivity ?: findActivity().also { hostActivity = it }
+                if (activity !== host || currentUrl == null || intendedPlayState || pipController.isPictureInPictureActive()) return
+                uiHandler.removeCallbacks(recoverResumeRunnable)
+                uiHandler.postDelayed(recoverResumeRunnable, RESUME_RECOVERY_DELAY_MS)
+            }
+            override fun onActivityPaused(activity: Activity) {}
+            override fun onActivityStopped(activity: Activity) {}
+            override fun onActivitySaveInstanceState(activity: Activity, outState: Bundle) {}
+            override fun onActivityDestroyed(activity: Activity) {}
+        }
+        app.registerActivityLifecycleCallbacks(lifecycleCallbacks)
+        lifecycleRegistered = true
+    }
+
+    private fun unregisterLifecycleCallbacks() {
+        uiHandler.removeCallbacks(recoverResumeRunnable)
+        if (!lifecycleRegistered) return
+        val app = context.applicationContext as? Application
+        lifecycleCallbacks?.let { app?.unregisterActivityLifecycleCallbacks(it) }
+        lifecycleCallbacks = null
+        lifecycleRegistered = false
+    }
+
+    private fun findActivity(): Activity? {
+        appContext.currentActivity?.let { return it }
+        var ctx: Context = context
+        while (ctx is ContextWrapper) {
+            if (ctx is Activity) return ctx
+            ctx = ctx.baseContext
+        }
+        return null
+    }
 
     override fun onDetachedFromWindow() {
         super.onDetachedFromWindow()
+        uiHandler.removeCallbacksAndMessages(null)
+        unregisterLifecycleCallbacks()
         pipController.stopPictureInPicture()
         renderer?.stop()
         renderer?.delegate = null
