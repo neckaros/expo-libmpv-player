@@ -26,6 +26,9 @@ final class MPVLayerRenderer {
     private var mpv: OpaquePointer?
     private var running = false
     private var stopping = false
+    private static let defaultCachePause = true
+    private static let defaultCachePauseInitial = false
+    private static let defaultCachePauseWaitSeconds = 1.0
 
     // Watch AVSampleBufferDisplayLayer failures and bound automatic decoder
     // recovery. This mirrors Lunarr's hardening: VideoToolbox sessions can be
@@ -192,9 +195,9 @@ final class MPVLayerRenderer {
             if let value = cacheSeconds { self.setPropertyOnQueue(handle, "cache-secs", String(value)) }
             if let value = demuxerMaxBytes { self.setPropertyOnQueue(handle, "demuxer-max-bytes", "\(value)MiB") }
             if let value = demuxerMaxBackBytes { self.setPropertyOnQueue(handle, "demuxer-max-back-bytes", "\(value)MiB") }
-            if let value = cachePause { self.setPropertyOnQueue(handle, "cache-pause", value ? "yes" : "no") }
-            if let value = cachePauseInitial { self.setPropertyOnQueue(handle, "cache-pause-initial", value ? "yes" : "no") }
-            if let value = cachePauseWaitSeconds { self.setPropertyOnQueue(handle, "cache-pause-wait", String(value)) }
+            self.setPropertyOnQueue(handle, "cache-pause", (cachePause ?? Self.defaultCachePause) ? "yes" : "no")
+            self.setPropertyOnQueue(handle, "cache-pause-initial", (cachePauseInitial ?? Self.defaultCachePauseInitial) ? "yes" : "no")
+            self.setPropertyOnQueue(handle, "cache-pause-wait", String(cachePauseWaitSeconds ?? Self.defaultCachePauseWaitSeconds))
             self.setPropertyOnQueue(handle, "start", startPosition.map { String(format: "%.2f", max(0, $0)) } ?? "0")
             let target = url.isFileURL ? url.path : url.absoluteString
             self.commandSync(handle, ["loadfile", target, "replace"])

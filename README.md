@@ -134,7 +134,9 @@ export function PlayerScreen() {
 `pauseWaitSeconds` map to mpv's `cache-pause`, `cache-pause-initial`, and
 `cache-pause-wait` options. The configuration above buffers approximately five seconds
 before starting or resuming and permits up to 30 seconds of read-ahead. All cache fields
-are optional; omitted fields retain the platform's existing mpv behavior.
+are optional. When omitted, `pause` resets to `true` and `pauseWaitSeconds` to `1` on
+both platforms; `pauseInitial` resets to mpv's `false` default on iOS and the player's
+existing `true` default on Android.
 
 ## Tracks and subtitles
 

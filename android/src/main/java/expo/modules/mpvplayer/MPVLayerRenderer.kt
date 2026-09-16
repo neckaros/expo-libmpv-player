@@ -37,6 +37,9 @@ class MPVLayerRenderer(
         private const val MPV_FORMAT_FLAG = 3
         private const val MPV_FORMAT_INT64 = 4
         private const val MPV_FORMAT_DOUBLE = 5
+        private const val DEFAULT_CACHE_PAUSE = true
+        private const val DEFAULT_CACHE_PAUSE_INITIAL = true
+        private const val DEFAULT_CACHE_PAUSE_WAIT_SECONDS = 1.0
     }
 
     override var delegate: PlayerEngine.Delegate? = null
@@ -247,9 +250,9 @@ class MPVLayerRenderer(
         config.cacheSeconds?.let { mpv?.setPropertyString("cache-secs", it.toString()) }
         config.demuxerMaxBytes?.let { mpv?.setPropertyString("demuxer-max-bytes", "${it}MiB") }
         config.demuxerMaxBackBytes?.let { mpv?.setPropertyString("demuxer-max-back-bytes", "${it}MiB") }
-        config.cachePause?.let { mpv?.setPropertyString("cache-pause", if (it) "yes" else "no") }
-        config.cachePauseInitial?.let { mpv?.setPropertyString("cache-pause-initial", if (it) "yes" else "no") }
-        config.cachePauseWaitSeconds?.let { mpv?.setPropertyString("cache-pause-wait", it.toString()) }
+        mpv?.setPropertyString("cache-pause", if (config.cachePause ?: DEFAULT_CACHE_PAUSE) "yes" else "no")
+        mpv?.setPropertyString("cache-pause-initial", if (config.cachePauseInitial ?: DEFAULT_CACHE_PAUSE_INITIAL) "yes" else "no")
+        mpv?.setPropertyString("cache-pause-wait", (config.cachePauseWaitSeconds ?: DEFAULT_CACHE_PAUSE_WAIT_SECONDS).toString())
         val pos = config.startPosition ?: 0.0
         mpv?.setPropertyString("start", if (pos > 0) String.format(Locale.US, "%.2f", pos) else "0")
         mpv?.command(arrayOf("loadfile", config.url, "replace"))
