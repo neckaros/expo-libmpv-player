@@ -20,12 +20,10 @@ output paths, hardware decoding and technical playback information.
 
 ## Installation
 
-Until you publish the package, install it from a local checkout or your GitHub repository:
+Install the package from npm:
 
 ```bash
-npm install ../expo-libmpv-player
-# or after pushing it:
-npm install github:YOUR_GITHUB_USER/expo-libmpv-player
+npm install expo-libmpv-player
 ```
 
 Add the config plugin to your Expo config:
@@ -215,6 +213,24 @@ For production, keep a small test corpus covering the combinations you care abou
 
 `VideoSource` supports HTTP headers, external subtitles, start position, autoplay, loop,
 initial audio/subtitle tracks, cache settings and Android MPV VO selection.
+
+## Publishing
+
+Publishing is automated by `.github/workflows/publish.yml`. On every push to `main`, the
+workflow checks the package name and version in `package.json`. It publishes only when that
+exact version is not already present on npm.
+
+The workflow uses npm Trusted Publishing with GitHub Actions OIDC and does not require an
+`NPM_TOKEN` repository secret. Configure the package's Trusted Publisher on npm with:
+
+- Organization or user: `neckaros`
+- Repository: `expo-libmpv-player`
+- Workflow filename: `publish.yml`
+- Allowed action: `npm publish`
+
+For a new release, update `version` in `package.json` and merge the change into `main`.
+The first package version must be published manually before npm allows a Trusted Publisher
+to be attached to the package.
 
 ## Licensing
 

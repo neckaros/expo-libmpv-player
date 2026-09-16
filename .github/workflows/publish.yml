@@ -1,0 +1,62 @@
+name: Publish to npm
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: npm-publish
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          package-manager-cache: false
+
+      - name: Check whether this version is new
+        id: version
+        shell: bash
+        run: |
+          package_name="$(node -p "require('./package.json').name")"
+          package_version="$(node -p "require('./package.json').version")"
+
+          if npm view "${package_name}@${package_version}" version >/dev/null 2>npm-view-error.log; then
+            echo "${package_name}@${package_version} is already published."
+            echo "should_publish=false" >> "$GITHUB_OUTPUT"
+          elif grep -q "E404" npm-view-error.log; then
+            if npm view "${package_name}" name >/dev/null 2>npm-package-error.log; then
+              echo "${package_name}@${package_version} is new and will be published."
+              echo "should_publish=true" >> "$GITHUB_OUTPUT"
+            elif grep -q "E404" npm-package-error.log; then
+              echo "::warning::${package_name} does not exist on npm yet. Publish the first version manually, then configure npm Trusted Publishing."
+              echo "should_publish=false" >> "$GITHUB_OUTPUT"
+            else
+              cat npm-package-error.log >&2
+              exit 1
+            fi
+          else
+            cat npm-view-error.log >&2
+            exit 1
+          fi
+
+      - name: Install dependencies
+        if: steps.version.outputs.should_publish == 'true'
+        run: npm ci --ignore-scripts
+
+      - name: Publish package
+        if: steps.version.outputs.should_publish == 'true'
+        run: npm publish --access public
