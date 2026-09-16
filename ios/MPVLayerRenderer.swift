@@ -172,7 +172,10 @@ final class MPVLayerRenderer {
         cacheEnabled: String? = nil,
         cacheSeconds: Int? = nil,
         demuxerMaxBytes: Int? = nil,
-        demuxerMaxBackBytes: Int? = nil
+        demuxerMaxBackBytes: Int? = nil,
+        cachePause: Bool? = nil,
+        cachePauseInitial: Bool? = nil,
+        cachePauseWaitSeconds: Double? = nil
     ) {
         onQueue { [weak self] in
             guard let self, let handle = self.mpv else { return }
@@ -189,6 +192,9 @@ final class MPVLayerRenderer {
             if let value = cacheSeconds { self.setPropertyOnQueue(handle, "cache-secs", String(value)) }
             if let value = demuxerMaxBytes { self.setPropertyOnQueue(handle, "demuxer-max-bytes", "\(value)MiB") }
             if let value = demuxerMaxBackBytes { self.setPropertyOnQueue(handle, "demuxer-max-back-bytes", "\(value)MiB") }
+            if let value = cachePause { self.setPropertyOnQueue(handle, "cache-pause", value ? "yes" : "no") }
+            if let value = cachePauseInitial { self.setPropertyOnQueue(handle, "cache-pause-initial", value ? "yes" : "no") }
+            if let value = cachePauseWaitSeconds { self.setPropertyOnQueue(handle, "cache-pause-wait", String(value)) }
             self.setPropertyOnQueue(handle, "start", startPosition.map { String(format: "%.2f", max(0, $0)) } ?? "0")
             let target = url.isFileURL ? url.path : url.absoluteString
             self.commandSync(handle, ["loadfile", target, "replace"])

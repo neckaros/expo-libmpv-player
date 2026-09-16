@@ -48,6 +48,9 @@ export type VideoSource = {
     cacheSeconds?: number;
     maxBytes?: number;
     maxBackBytes?: number;
+    pause?: boolean;
+    pauseInitial?: boolean;
+    pauseWaitSeconds?: number;
   };
   /** MPV video output driver (Android only). */
   voDriver?: "gpu-next" | "gpu";

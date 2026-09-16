@@ -247,6 +247,9 @@ class MPVLayerRenderer(
         config.cacheSeconds?.let { mpv?.setPropertyString("cache-secs", it.toString()) }
         config.demuxerMaxBytes?.let { mpv?.setPropertyString("demuxer-max-bytes", "${it}MiB") }
         config.demuxerMaxBackBytes?.let { mpv?.setPropertyString("demuxer-max-back-bytes", "${it}MiB") }
+        config.cachePause?.let { mpv?.setPropertyString("cache-pause", if (it) "yes" else "no") }
+        config.cachePauseInitial?.let { mpv?.setPropertyString("cache-pause-initial", if (it) "yes" else "no") }
+        config.cachePauseWaitSeconds?.let { mpv?.setPropertyString("cache-pause-wait", it.toString()) }
         val pos = config.startPosition ?: 0.0
         mpv?.setPropertyString("start", if (pos > 0) String.format(Locale.US, "%.2f", pos) else "0")
         mpv?.command(arrayOf("loadfile", config.url, "replace"))

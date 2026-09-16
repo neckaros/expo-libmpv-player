@@ -48,7 +48,10 @@ public class MpvPlayerModule: Module {
                     cacheEnabled: cache?["enabled"] as? String,
                     cacheSeconds: self.intValue(cache?["cacheSeconds"]),
                     demuxerMaxBytes: self.intValue(cache?["maxBytes"]),
-                    demuxerMaxBackBytes: self.intValue(cache?["maxBackBytes"])
+                    demuxerMaxBackBytes: self.intValue(cache?["maxBackBytes"]),
+                    cachePause: cache?["pause"] as? Bool,
+                    cachePauseInitial: cache?["pauseInitial"] as? Bool,
+                    cachePauseWaitSeconds: cache?["pauseWaitSeconds"] as? Double
                 ))
             }
             Prop("nowPlayingMetadata") { (view: MpvPlayerView, metadata: [String: Any]?) in

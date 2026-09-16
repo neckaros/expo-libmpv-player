@@ -18,6 +18,9 @@ data class VideoLoadConfig(
     val cacheSeconds: Int? = null,
     val demuxerMaxBytes: Int? = null,
     val demuxerMaxBackBytes: Int? = null,
+    val cachePause: Boolean? = null,
+    val cachePauseInitial: Boolean? = null,
+    val cachePauseWaitSeconds: Double? = null,
 )
 
 interface PlayerEngine {

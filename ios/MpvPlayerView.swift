@@ -15,6 +15,9 @@ struct VideoLoadConfig {
     var cacheSeconds: Int?
     var demuxerMaxBytes: Int?
     var demuxerMaxBackBytes: Int?
+    var cachePause: Bool?
+    var cachePauseInitial: Bool?
+    var cachePauseWaitSeconds: Double?
 }
 
 class MpvPlayerView: ExpoView {

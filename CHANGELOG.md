@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+> **Native rebuild required:** This release changes iOS/Android native code and cannot be
+> delivered through an OTA update alone. Rebuild development clients and production apps;
+> use `npx expo prebuild --clean` only when native directories are generated.
+
+### Added
+
+- Optional `cacheConfig.pause`, `pauseInitial`, and `pauseWaitSeconds` controls, mapped to
+  mpv's cache pause settings on iOS and Android.
+
 ## 0.2.0 - 2026-09-15
 
 ### Added

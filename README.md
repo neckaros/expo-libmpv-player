@@ -104,10 +104,13 @@ export function PlayerScreen() {
           url: "https://example.com/video.mkv",
           autoplay: true,
           cacheConfig: {
-            enabled: "auto",
-            cacheSeconds: 20,
+            enabled: "yes",
+            cacheSeconds: 30,
             maxBytes: 200,
-            maxBackBytes: 50,
+            maxBackBytes: 10,
+            pause: true,
+            pauseInitial: true,
+            pauseWaitSeconds: 5,
           },
         }}
         onProgress={({ nativeEvent }) => {
@@ -126,6 +129,12 @@ export function PlayerScreen() {
   );
 }
 ```
+
+`cacheSeconds` controls the read-ahead target, while `pause`, `pauseInitial`, and
+`pauseWaitSeconds` map to mpv's `cache-pause`, `cache-pause-initial`, and
+`cache-pause-wait` options. The configuration above buffers approximately five seconds
+before starting or resuming and permits up to 30 seconds of read-ahead. All cache fields
+are optional; omitted fields retain the platform's existing mpv behavior.
 
 ## Tracks and subtitles
 
