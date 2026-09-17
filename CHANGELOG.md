@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.2.1 - 2026-09-17
 
 > **Native rebuild required:** This release changes iOS/Android native code and cannot be
 > delivered through an OTA update alone. Rebuild development clients and production apps;

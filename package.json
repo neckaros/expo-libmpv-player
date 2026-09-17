@@ -1,6 +1,6 @@
 {
   "name": "expo-libmpv-player",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Standalone Expo libmpv video player derived from Streamyfin and hardened with Lunarr improvements, with PiP, HDR-aware output, tracks, subtitles, and broad codec/container support.",
   "repository": {
     "type": "git",

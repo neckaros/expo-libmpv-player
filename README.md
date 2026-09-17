@@ -7,7 +7,7 @@ than the platform players alone: MKV and other containers, AV1 where the device/
 decode it, audio/subtitle track selection, external subtitles, Picture in Picture, HDR-aware
 output paths, hardware decoding and technical playback information.
 
-> **Status:** standalone native module (`0.2.0`). The source has been separated from Streamyfin, merged with selected Lunarr hardening, and statically checked, but this repository has not yet been compiled in a full Xcode/Gradle device build in this environment. Treat it as a testable native-module repo rather than a production-certified player.
+> **Status:** standalone native module (`0.2.1`). The source has been separated from Streamyfin, merged with selected Lunarr hardening, and statically checked, but this repository has not yet been compiled in a full Xcode/Gradle device build in this environment. Treat it as a testable native-module repo rather than a production-certified player.
 
 ## Platforms
 
