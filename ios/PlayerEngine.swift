@@ -99,7 +99,10 @@ final class MPVPlayerEngine: NSObject {
             cacheEnabled: config.cacheEnabled,
             cacheSeconds: config.cacheSeconds,
             demuxerMaxBytes: config.demuxerMaxBytes,
-            demuxerMaxBackBytes: config.demuxerMaxBackBytes
+            demuxerMaxBackBytes: config.demuxerMaxBackBytes,
+            cachePause: config.cachePause,
+            cachePauseInitial: config.cachePauseInitial,
+            cachePauseWaitSeconds: config.cachePauseWaitSeconds
         )
         if config.autoplay { play() }
         delegate?.engine(self, didLoad: config.url)

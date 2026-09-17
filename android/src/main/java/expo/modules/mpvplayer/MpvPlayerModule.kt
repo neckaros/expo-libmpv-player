@@ -43,6 +43,9 @@ class MpvPlayerModule : Module() {
                     cacheSeconds = (cache?.get("cacheSeconds") as? Number)?.toInt(),
                     demuxerMaxBytes = (cache?.get("maxBytes") as? Number)?.toInt(),
                     demuxerMaxBackBytes = (cache?.get("maxBackBytes") as? Number)?.toInt(),
+                    cachePause = cache?.get("pause") as? Boolean,
+                    cachePauseInitial = cache?.get("pauseInitial") as? Boolean,
+                    cachePauseWaitSeconds = (cache?.get("pauseWaitSeconds") as? Number)?.toDouble(),
                 )
                 view.loadVideo(config)
             }

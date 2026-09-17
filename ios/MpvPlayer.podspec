@@ -1,6 +1,6 @@
 Pod::Spec.new do |s|
   s.name = 'MpvPlayer'
-  s.version = '0.2.0'
+  s.version = '0.2.1'
   s.summary = 'Standalone Expo libmpv player derived from Streamyfin with Lunarr hardening'
   s.description = 'Expo native module using MPVKit/libmpv with AVSampleBufferDisplayLayer and Picture in Picture support.'
   s.author = 'Streamyfin contributors and downstream contributors'
