@@ -351,6 +351,9 @@ final class MPVLayerRenderer {
             if let v = getStringProperty(handle, "track-list/\(i)/lang") { row["lang"] = v }
             if let v = getStringProperty(handle, "track-list/\(i)/codec") { row["codec"] = v }
             var selected: Int32 = 0; _ = getProperty(handle, "track-list/\(i)/selected", MPV_FORMAT_FLAG, &selected); row["selected"] = selected != 0
+            var isDefault: Int32 = 0; _ = getProperty(handle, "track-list/\(i)/default", MPV_FORMAT_FLAG, &isDefault); row["default"] = isDefault != 0
+            var forced: Int32 = 0; _ = getProperty(handle, "track-list/\(i)/forced", MPV_FORMAT_FLAG, &forced); row["forced"] = forced != 0
+            var hearingImpaired: Int32 = 0; _ = getProperty(handle, "track-list/\(i)/hearing-impaired", MPV_FORMAT_FLAG, &hearingImpaired); row["hearingImpaired"] = hearingImpaired != 0
             if type == "sub" {
                 var external: Int32 = 0; _ = getProperty(handle, "track-list/\(i)/external", MPV_FORMAT_FLAG, &external); row["external"] = external != 0
                 if let v = getStringProperty(handle, "track-list/\(i)/external-filename") { row["externalFilename"] = v }

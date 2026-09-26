@@ -316,6 +316,9 @@ class MPVLayerRenderer(
             mpv?.getPropertyString("track-list/$i/lang")?.let { row["lang"] = it }
             mpv?.getPropertyString("track-list/$i/codec")?.let { row["codec"] = it }
             row["selected"] = mpv?.getPropertyBoolean("track-list/$i/selected") ?: false
+            row["default"] = mpv?.getPropertyBoolean("track-list/$i/default") ?: false
+            row["forced"] = mpv?.getPropertyBoolean("track-list/$i/forced") ?: false
+            row["hearingImpaired"] = mpv?.getPropertyBoolean("track-list/$i/hearing-impaired") ?: false
             if (type == "sub") {
                 row["external"] = mpv?.getPropertyBoolean("track-list/$i/external") ?: false
                 mpv?.getPropertyString("track-list/$i/external-filename")?.let { row["externalFilename"] = it }

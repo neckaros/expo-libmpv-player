@@ -133,6 +133,12 @@ export type SubtitleTrack = {
   externalFilename?: string;
   ffIndex?: number;
   selected?: boolean;
+  /** The file marks this track as default. */
+  default?: boolean;
+  /** The file marks this track as forced. */
+  forced?: boolean;
+  /** The file marks this track as for the hearing impaired (SDH). */
+  hearingImpaired?: boolean;
 };
 
 export type AudioTrack = {
@@ -142,6 +148,12 @@ export type AudioTrack = {
   codec?: string;
   channels?: number;
   selected?: boolean;
+  /** The file marks this track as default. */
+  default?: boolean;
+  /** The file marks this track as forced. */
+  forced?: boolean;
+  /** The file marks this track as for the hearing impaired (SDH). */
+  hearingImpaired?: boolean;
 };
 
 export type TechnicalInfo = {
