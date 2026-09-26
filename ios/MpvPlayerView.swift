@@ -56,11 +56,18 @@ class MpvPlayerView: ExpoView {
         CATransaction.commit()
     }
 
+    // Fabric invokes `invalidate` only when this React view is permanently
+    // unmounted. A temporary `window == nil` transition can also happen while
+    // navigating, so it must not terminally shut down the engine.
+    @objc func invalidate() {
+        engine.shutdown()
+    }
+
     func loadVideo(config: VideoLoadConfig) { engine.loadVideo(config: config) }
     func setNowPlayingMetadata(_ metadata: [String: String], artworkHeaders: [String: String]? = nil) { engine.setNowPlayingMetadata(metadata, artworkHeaders: artworkHeaders) }
     func play() { engine.play() }
     func pause() { engine.pause() }
-    func destroy() { engine.destroy() }
+    func destroy() { engine.shutdown() }
     func seekTo(position: Double) { engine.seekTo(position: position) }
     func seekBy(offset: Double) { engine.seekBy(offset: offset) }
     func setSpeed(speed: Double) { engine.setSpeed(speed: speed) }

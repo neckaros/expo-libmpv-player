@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.2.2 - 2026-09-26
+
+> **Native rebuild required:** This release changes iOS/Android native code and cannot be
+> delivered through an OTA update alone. Rebuild development clients and production apps;
+> use `npx expo prebuild --clean` only when native directories are generated.
+
+### Added
+
+- Audio and subtitle tracks report the file's `default`, `forced`, and `hearingImpaired`
+  flags on iOS and Android.
+
+### Fixed
+
+- Android: removing the player no longer throws when the activity doesn't support
+  Picture in Picture (for example on Android TV).
+- iOS: the engine shuts down (stops mpv and PiP, releases the audio session and Now
+  Playing controls) when Fabric permanently unmounts the view (`invalidate`), instead of
+  waiting for the view to be deallocated.
+- iOS: `destroy()` now shuts the engine down for good instead of restarting the renderer.
+
 ## 0.2.1 - 2026-09-17
 
 > **Native rebuild required:** This release changes iOS/Android native code and cannot be

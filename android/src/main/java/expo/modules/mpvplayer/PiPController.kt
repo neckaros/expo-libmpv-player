@@ -52,7 +52,10 @@ class PiPController(private val context: Context, private val appContext: AppCon
 
     fun stopPictureInPicture() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            getActivity()?.setPictureInPictureParams(PictureInPictureParams.Builder().setAutoEnterEnabled(false).build())
+            // Throws when the activity doesn't support PiP; this runs during view teardown.
+            try {
+                getActivity()?.setPictureInPictureParams(PictureInPictureParams.Builder().setAutoEnterEnabled(false).build())
+            } catch (_: Exception) {}
         }
         unregisterLifecycleCallbacks()
     }
