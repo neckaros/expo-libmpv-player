@@ -52,8 +52,13 @@ export type VideoSource = {
     pauseInitial?: boolean;
     pauseWaitSeconds?: number;
   };
-  /** MPV video output driver (Android only). */
-  voDriver?: "gpu-next" | "gpu";
+  /**
+   * MPV video output driver (Android only). `mediacodec_embed` decodes with
+   * MediaCodec straight to the surface: no frame copy and no GPU rendering, so
+   * high-resolution and HDR video play without tone mapping, but subtitles and
+   * video filters are not rendered. The driver is chosen when the player starts.
+   */
+  voDriver?: "gpu-next" | "gpu" | "mediacodec_embed";
 };
 
 export type MpvPlayerViewProps = {

@@ -14,6 +14,7 @@ import expo.modules.mpvplayer.nativeplayer.engine.PlayerEngine
 import expo.modules.mpvplayer.nativeplayer.engine.VideoLoadConfig
 import java.io.File
 import java.util.Locale
+import java.util.concurrent.atomic.AtomicInteger
 
 private fun normalizeVideoDimensions(width: Int, height: Int, rotation: Int): Pair<Int, Int> {
     val r = ((rotation % 360) + 360) % 360
@@ -71,6 +72,11 @@ class MPVLayerRenderer(
     @Volatile private var loading = false
     @Volatile private var seeking = false
     private var lastProgressMs = 0L
+    // A file that ends before it loaded failed to open, unless a newer load
+    // replaced it: loads issued vs. files mpv started.
+    private val loadsIssued = AtomicInteger(0)
+    @Volatile private var filesStarted = 0
+    @Volatile private var fileLoaded = false
 
     override val videoWidth: Int get() = _videoWidth
     override val videoHeight: Int get() = _videoHeight
@@ -101,6 +107,8 @@ class MPVLayerRenderer(
                 try {
                     val instance = MPVLib.create(context)
                     mpv = instance
+                    loadsIssued.set(0)
+                    filesStarted = 0
                     instance.addObserver(this)
 
                     // Give fontconfig stable writable config/cache locations.
@@ -126,6 +134,8 @@ class MPVLayerRenderer(
                     instance.setOptionString("hwdec-codecs", "h264,hevc,mpeg4,mpeg2video,vp8,vp9,av1")
                     instance.setOptionString("cache-pause-initial", "yes")
                     when {
+                        // Decoded straight to the surface: no copy, no GPU rendering.
+                        voDriver == "mediacodec_embed" -> instance.setOptionString("hwdec", "mediacodec")
                         isEmulator() -> instance.setOptionString("hwdec", "no")
                         isTv -> {
                             // Zero-copy mediacodec wedges some low-end TV SoCs;
@@ -235,6 +245,8 @@ class MPVLayerRenderer(
     }
 
     override fun load(config: VideoLoadConfig) {
+        // Before the stop: the end of the file it replaces is not a failure.
+        if (mpv != null) loadsIssued.incrementAndGet()
         currentConfig = config
         pendingExternalSubtitles = config.externalSubtitles ?: emptyList()
         activeExternalSubtitles = pendingExternalSubtitles
@@ -466,6 +478,7 @@ class MPVLayerRenderer(
                 initialAudioId?.takeIf { it > 0 }?.let(::setAudioTrack)
                 initialSubtitleId?.let(::setSubtitleTrack) ?: disableSubtitles()
                 loading = false
+                fileLoaded = true
                 main.post { delegate?.onTracksReady(); delegate?.onReadyToSeek(); delegate?.onLoadingChanged(false) }
             }
             MPVLib.MPV_EVENT_SEEK -> { seeking = true; loading = true; main.post { delegate?.onLoadingChanged(true) } }
@@ -474,8 +487,18 @@ class MPVLayerRenderer(
                 // Genuine EOF is emitted via the eof-reached property. END_FILE
                 // also fires for stop/reload, so do not dispatch onEnd here.
                 seeking = false
+                // A file that never loaded failed to open (an unreachable URL, an
+                // HTTP error), unless a newer load stopped it.
+                if (running && !fileLoaded && filesStarted == loadsIssued.get()) {
+                    fileLoaded = true
+                    main.post { delegate?.onError("Failed to open the file") }
+                }
             }
-            MPVLib.MPV_EVENT_START_FILE -> { seeking = false }
+            MPVLib.MPV_EVENT_START_FILE -> {
+                seeking = false
+                filesStarted += 1
+                fileLoaded = false
+            }
         }
     }
 
