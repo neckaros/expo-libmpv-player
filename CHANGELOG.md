@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.2.3 - 2026-10-21
+
+> **Native rebuild required:** This release changes Android native code and cannot be
+> delivered through an OTA update alone. Rebuild development clients and production apps;
+> use `npx expo prebuild --clean` only when native directories are generated.
+
+### Added
+
+- Android: `voDriver: "mediacodec_embed"` decodes with MediaCodec straight to the surface
+  (`hwdec=mediacodec`), without copying frames back or rendering them on the GPU. Suited to
+  4K and HDR live streams on TV devices; subtitles and video filters are not rendered.
+
+### Fixed
+
+- Android: a file that fails to open (unreachable URL, HTTP error) now sends `onError`
+  instead of leaving the player loading. A file stopped by a newer load is not reported.
+
 ## 0.2.2 - 2026-09-26
 
 > **Native rebuild required:** This release changes iOS/Android native code and cannot be
