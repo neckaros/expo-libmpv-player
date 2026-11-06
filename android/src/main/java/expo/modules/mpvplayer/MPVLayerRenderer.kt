@@ -49,7 +49,8 @@ class MPVLayerRenderer(
     override var playbackResumeIntent: Boolean = false
 
     private val main = Handler(Looper.getMainLooper())
-    private var mpv: MPVLib? = null
+    // Read from the module, event and stop threads: they must see it cleared.
+    @Volatile private var mpv: MPVLib? = null
     private var surface: Surface? = null
     private var running = false
     private var pendingToken: Any? = null
@@ -198,6 +199,10 @@ class MPVLayerRenderer(
             try { instance.command(arrayOf("stop")) } catch (_: Exception) {}
             try { instance.removeObserver(this) } catch (_: Exception) {}
             try { instance.detachSurface() } catch (_: Exception) {}
+            // Each start creates a new core: a stopped one left alive keeps its
+            // memory, which adds up with every file and live channel opened.
+            // Released once it is gone, so two cores never live at once.
+            try { instance.destroy() } catch (e: Exception) { Log.w(TAG, "Failed to destroy mpv", e) }
             token?.let(MpvOwnership::release)
         }.also { it.isDaemon = true }.start()
     }
