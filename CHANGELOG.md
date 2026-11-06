@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.2.4 - 2026-11-06
 
 > **Native rebuild required:** This release changes Android native code and cannot be
 > delivered through an OTA update alone. Rebuild development clients and production apps;
