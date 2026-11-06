@@ -30,6 +30,16 @@ class MPVLib private constructor(private val instance: LibMPV) {
     fun addObserver(observer: EventObserver) = synchronized(observers) { observers.add(observer); Unit }
     fun removeObserver(observer: EventObserver) = synchronized(observers) { observers.remove(observer); Unit }
     fun initialize() = instance.init()
+
+    /**
+     * Shuts the core down and frees it: its threads, caches, decoders and fonts
+     * stay in memory until then. Nothing may use this instance afterwards.
+     */
+    fun destroy() {
+        synchronized(observers) { observers.clear() }
+        instance.removeObserver(libObserver)
+        instance.destroy()
+    }
     fun attachSurface(surface: android.view.Surface) = instance.attachSurface(surface)
     fun detachSurface() = instance.detachSurface()
     fun command(cmd: Array<String>) = instance.command(cmd)
