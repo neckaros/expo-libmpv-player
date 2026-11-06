@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+> **Native rebuild required:** This release changes Android native code and cannot be
+> delivered through an OTA update alone. Rebuild development clients and production apps;
+> use `npx expo prebuild --clean` only when native directories are generated.
+
 ### Fixed
 
 - Android: a stopped player now frees its mpv core. Each start creates a new core and the
