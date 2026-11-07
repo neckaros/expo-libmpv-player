@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.2.5 - 2026-11-07
+
+> **Native rebuild required:** This release changes Android native code and cannot be
+> delivered through an OTA update alone. Rebuild development clients and production apps;
+> use `npx expo prebuild --clean` only when native directories are generated.
+
+### Fixed
+
+- Android: closing a player with `voDriver: "mediacodec_embed"` could abort the app
+  (`assertion "vo->opts->WinID != 0 && vo->opts->WinID != -1" failed` in
+  `create_mediacodec_device_ref`): the video output reconfigured after its surface was
+  detached. As in mpv-android, the video output is now turned off (`vo=null`) before the
+  surface goes, and restored when a surface comes back.
+
 ## 0.2.4 - 2026-11-06
 
 > **Native rebuild required:** This release changes Android native code and cannot be
