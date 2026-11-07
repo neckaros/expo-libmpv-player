@@ -196,6 +196,8 @@ class MPVLayerRenderer(
         }
         Thread {
             try { instance.setOptionString("force-window", "no") } catch (_: Exception) {}
+            // No video output before the surface goes (see detachSurface).
+            try { instance.setPropertyString("vo", "null") } catch (_: Exception) {}
             try { instance.command(arrayOf("stop")) } catch (_: Exception) {}
             try { instance.removeObserver(this) } catch (_: Exception) {}
             try { instance.detachSurface() } catch (_: Exception) {}
@@ -214,12 +216,22 @@ class MPVLayerRenderer(
         if (running) {
             mpv?.attachSurface(surface)
             mpv?.setOptionString("force-window", "yes")
+            // Back from detachSurface: the video output draws on this surface again.
+            mpv?.setPropertyString("vo", voDriver)
         }
     }
 
     override fun detachSurface() {
         surface = null
-        if (running) mpv?.detachSurface()
+        if (running) {
+            // Like mpv-android: the video output goes before its surface. A
+            // reconfiguration without a surface aborts the app with
+            // mediacodec_embed (assertion "vo->opts->WinID != 0" in
+            // create_mediacodec_device_ref), e.g. while the view is closed.
+            mpv?.setPropertyString("vo", "null")
+            mpv?.setOptionString("force-window", "no")
+            mpv?.detachSurface()
+        }
     }
 
     override fun updateSurfaceSize(width: Int, height: Int) {
